@@ -2,6 +2,8 @@
 
 using namespace Pythia8;
 
+//===========================================================
+
 class State{
 
 public:
@@ -15,6 +17,7 @@ public:
   State* previous;
 };
 
+//===========================================================
 
 class DecayChain {
 
@@ -24,6 +27,8 @@ public:
   bool init(int argc, char** argv);
   State* addParticle(int i);
   void displayParticle(State* Head);
+
+  float getFrac(State* Head, int nLep = -1, int nJet = -1, bool MET = false);
   
   bool isJ(int i);
   bool isL(int i);
@@ -40,21 +45,29 @@ private:
   
 };
 
+//-----------------------------------------------------------
+
 bool DecayChain::isJ(int i){
   if (abs(i) < 6) return true;
   return false;
 }
+
+//-----------------------------------------------------------
 
 bool DecayChain::isL(int i){
   if(abs(i) == 11 || abs(i) == 13) return true;
   return false;
 }
 
+//-----------------------------------------------------------
+
 bool DecayChain::isI(int i){
   int ii = abs(i);
   if (ii == 12 || ii == 14 || ii == 16) return true;
   return false;
 }
+
+//-----------------------------------------------------------
 
 bool DecayChain::init(int argc, char** argv){
 
@@ -83,6 +96,7 @@ bool DecayChain::init(int argc, char** argv){
   
 }
 
+//-----------------------------------------------------------
 
 State* DecayChain::addParticle(int iIn){
 
@@ -273,6 +287,8 @@ State* DecayChain::addParticle(int iIn){
   return Head;
 }
 
+//-----------------------------------------------------------
+
 void DecayChain::displayParticle(State* Head){
   
   State* cur = Head;
@@ -295,6 +311,45 @@ void DecayChain::displayParticle(State* Head){
   
 }
 
+//-----------------------------------------------------------
+
+float DecayChain::getFrac(State* Head, int nLep, int nJet, bool MET){
+
+  if(!Head)
+    clog << "DecayChain::getFrac : No head node found. Exiting. " << endl;
+  
+  State* cur = Head;
+  if (nLep == -1 && nJet == -1 && !MET) {
+    clog << "DecayChain::getFrac : No final states given. Exiting. " << endl;
+    return 0.0;
+  }
+  
+  float brsum = 0.0;
+  
+  while(true){
+    int njet = 0, nlep = 0, ninv = 0;
+    for (int i = 0; i< cur->psize;i++) {
+      int pid = abs(cur->particles[i]);
+      if(pid < 6) njet++;
+      if(pid == 11 || pid == 13) nlep++;
+      if(pid == 12 || pid == 14 || pid == 16) ninv++;
+      if(pid > 1000000) ninv++;
+    }
+    
+    bool accept = true;
+    if (MET && ninv == 0) accept = false;
+    if (nLep > -1 && nLep != nlep) accept = false;
+    if (nJet > -1 && nJet != njet) accept = false;
+    
+    if (accept) brsum += cur->bratio;
+    if(!cur->next) break;
+    cur = cur->next;
+  }
+  
+  return brsum;
+}
+
+//===========================================================
 
 int main(int argc, char** argv) {
 
@@ -304,7 +359,29 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  State* part1 = dchain.addParticle(6);
+  State* part1 = dchain.addParticle(1000021);
   dchain.displayParticle(part1);
-  
+  cout << "0l + 2j + MET: " << dchain.getFrac(part1, 0, 2, true) << endl;
+  cout << "0l + 3j + MET: " << dchain.getFrac(part1, 0, 3, true) << endl;
+  cout << "0l + 4j + MET: " << dchain.getFrac(part1, 0, 4, true) << endl;
+  cout << "1l + 2j + MET: " << dchain.getFrac(part1, 1, 2, true) << endl;
+  cout << "1l + 3j + MET: " << dchain.getFrac(part1, 1, 3, true) << endl;
+  cout << "1l + 4j + MET: " << dchain.getFrac(part1, 1, 4, true) << endl;
+  cout << "0l: " << dchain.getFrac(part1, 0, -1, true) << endl;
+  cout << "1l: " << dchain.getFrac(part1, 1, -1, true) << endl;
+  cout << "2l: " << dchain.getFrac(part1, 2, -1, true) << endl;
+  cout << "3l: " << dchain.getFrac(part1, 3, -1, true) << endl;
+  cout << "4l: " << dchain.getFrac(part1, 4, -1, true) << endl;
+  cout << "0j: " << dchain.getFrac(part1, -1, 0, true) << endl;
+  cout << "1j: " << dchain.getFrac(part1, -1, 1, true) << endl;
+  cout << "2j: " << dchain.getFrac(part1, -1, 2, true) << endl;
+  cout << "3j: " << dchain.getFrac(part1, -1, 3, true) << endl;
+  cout << "4j: " << dchain.getFrac(part1, -1, 4, true) << endl;
+  cout << "No MET" << dchain.getFrac(part1, 0, -1, false) << endl; 
 }
+
+/******** TODO ************:
+
+1. Add method to delete particle
+
+**************************/
