@@ -1,0 +1,63 @@
+! main24.cmnd
+! This file contains commands to be read in for a Pythia8 run.
+! Lines not beginning with a letter or digit are comments.
+
+! 1) Settings used in the main program.
+Main:numberOfEvents = 10000       ! number of events to generate
+Main:timesAllowErrors = 3          ! how many aborts before run stops
+
+! 2) Settings related to output in init(), next() and stat().
+Init:showChangedSettings = on      ! list changed settings
+Init:showChangedParticleData = off ! list changed particle data
+Init:showOneParticleData = 36      ! print data for this particular particle
+Next:numberCount = 500             ! print message every n events
+Next:numberShowInfo = 0            ! print event information n times
+Next:numberShowProcess = 2         ! print process record n times
+Next:numberShowEvent = 0           ! print event record n times
+
+! 3) Beam parameter settings. Values below agree with default ones.
+Beams:idA = 2212                   ! first beam, p = 2212, pbar = -2212
+Beams:idB = 2212                   ! second beam, p = 2212, pbar = -2212
+Beams:eCM = 8000.                 ! CM energy of collision
+
+! 4) Read SLHA spectrum
+# SLHA:file = sps1aWithDecays.spc     ! Older example including DECAY tables
+SLHA:file = events_H3_short.lhe
+
+SLHA:minMassSM = 10.0
+SLHA:keepSM = on
+
+! 5) Process selection
+#Higgs:useBSM = on
+#HiggsBSM:allH2 = on
+
+#SUSY:all = on                      ! Switches on ALL (~400) SUSY processes
+# SUSY:gg2gluinogluino  = on
+# SUSY:qqbar2gluinogluino  = on
+# SUSY:qg2squarkgluino = on
+# SUSY:gg2squarkantisquark = on
+# SUSY:qqbar2squarkantisquark = on
+# SUSY:qq2squarksquark = on
+# SUSY:qqbar2chi0chi0  = on
+# SUSY:qqbar2chi+-chi0 = on
+# SUSY:qqbar2chi+chi-  = on
+# SUSY:qg2chi0squark = on
+# SUSY:qg2chi+-squark  = on
+! Optionally select only specific sparticle codes in the final state
+# SUSY:idA = 1000022
+# SUSY:idB = 1000022
+# SUSY:idVecA = 1000001,1000002           ! 0: all
+# SUSY:idVecB = 1000023,1000024           ! 0: all
+
+! 6) Settings for the event generation process in the Pythia8 library.
+PartonLevel:MPI = off              ! no multiparton interactions
+PartonLevel:ISR = off              ! no initial-state radiation
+PartonLevel:FSR = off              ! no final-state radiation
+HadronLevel:Hadronize = off        ! no hadronization
+
+! 7) For comparison with Pythia 6
+# PDF:pSet = 8 !(CTEQ6L1)
+# SigmaProcess:factorscale2 = 4 ! sqrt(s-hat)
+# SigmaProcess:renormScale2 = 4
+# SigmaProcess:alphaSvalue = 0.1265
+# SigmaProcess:alphaSorder = 1
