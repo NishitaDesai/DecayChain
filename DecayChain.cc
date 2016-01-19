@@ -29,6 +29,7 @@ public:
   void displayParticle(State* Head);
 
   float getFrac(State* Head, int nLep = -1, int nJet = -1, bool MET = false);
+  float get2Frac(State* Head1, State* Head2, int nLep = -1, int nJet = -1, bool MET = false);
   
   bool isJ(int i);
   bool isL(int i);
@@ -82,6 +83,9 @@ bool DecayChain::init(int argc, char** argv){
     pythia.readString("SLHA:minMassSM = 10.0");
     pythia.readString("SLHA:allowUserOverride = true");
     pythia.readString("ResonanceWidths:minWidth = 1.0e-30");
+    pythia.readString("Init:showChangedSettings = off      ! list changed settings");
+    pythia.readString("Init:showChangedParticleData = off ! list changed particle data");
+
   }
   else {
     clog << "Please give an SLHA file" <<endl;
@@ -315,15 +319,17 @@ void DecayChain::displayParticle(State* Head){
 
 float DecayChain::getFrac(State* Head, int nLep, int nJet, bool MET){
 
-  if(!Head)
+  if(!Head){
     clog << "DecayChain::getFrac : No head node found. Exiting. " << endl;
-  
-  State* cur = Head;
-  if (nLep == -1 && nJet == -1 && !MET) {
-    clog << "DecayChain::getFrac : No final states given. Exiting. " << endl;
     return 0.0;
   }
   
+  if (nLep < 0  && nJet < 0 && !MET) {
+    clog << "DecayChain::getFrac : No final states given. Exiting. " << endl;
+    return 0.0;
+  }
+
+  State* cur = Head;
   float brsum = 0.0;
   
   while(true){
@@ -349,6 +355,48 @@ float DecayChain::getFrac(State* Head, int nLep, int nJet, bool MET){
   return brsum;
 }
 
+//-----------------------------------------------------------
+
+float DecayChain::get2Frac(State* Head1, State* Head2, int nLep, int nJet, bool MET){
+
+  if(!Head1 || !Head2){
+    clog << "DecayChain::get2Frac : No head node found. Exiting. " << endl;
+    return 0.0;
+  }
+  if (nLep < 0 && nJet < 0 && !MET) {
+    clog << "DecayChain::get2Frac : No final states given. Exiting. " << endl;
+    return 0.0;
+  }
+
+  float brfrac = 0;
+
+  if (nLep > -1 && nJet == -1){
+    // Only Leptons
+    for (int il = 0; il <= nLep; il++)
+      brfrac += getFrac(Head1, il, nJet, MET) * getFrac(Head2, nLep-il, nJet, MET); 
+  }
+  else if (nLep == -1 && nJet > -1) {
+    // Only jets exclusive
+    for (int ij = 0; ij <= nJet; ij++)
+      brfrac += getFrac(Head1, nLep, ij, MET) * getFrac(Head2, nLep, nJet-ij, MET); 
+    
+  }
+  else if (nLep + nJet == -2){
+    // Only MET
+    brfrac += getFrac(Head1, nLep, nJet, MET) * getFrac(Head2, nLep, nJet, MET);     
+  }
+  else {
+    for (int il = 0; il <= nLep; il++){
+      for (int ij = 0; ij <= nJet; ij++){
+	brfrac += getFrac(Head1, il, ij, MET) * getFrac(Head2, nLep-il, nJet-ij, MET); 
+      }
+    }
+  }
+
+  return brfrac;
+  
+}
+
 //===========================================================
 
 int main(int argc, char** argv) {
@@ -360,24 +408,52 @@ int main(int argc, char** argv) {
   }
 
   State* part1 = dchain.addParticle(1000021);
-  dchain.displayParticle(part1);
-  cout << "0l + 2j + MET: " << dchain.getFrac(part1, 0, 2, true) << endl;
-  cout << "0l + 3j + MET: " << dchain.getFrac(part1, 0, 3, true) << endl;
-  cout << "0l + 4j + MET: " << dchain.getFrac(part1, 0, 4, true) << endl;
-  cout << "1l + 2j + MET: " << dchain.getFrac(part1, 1, 2, true) << endl;
-  cout << "1l + 3j + MET: " << dchain.getFrac(part1, 1, 3, true) << endl;
-  cout << "1l + 4j + MET: " << dchain.getFrac(part1, 1, 4, true) << endl;
-  cout << "0l: " << dchain.getFrac(part1, 0, -1, true) << endl;
-  cout << "1l: " << dchain.getFrac(part1, 1, -1, true) << endl;
-  cout << "2l: " << dchain.getFrac(part1, 2, -1, true) << endl;
-  cout << "3l: " << dchain.getFrac(part1, 3, -1, true) << endl;
-  cout << "4l: " << dchain.getFrac(part1, 4, -1, true) << endl;
-  cout << "0j: " << dchain.getFrac(part1, -1, 0, true) << endl;
-  cout << "1j: " << dchain.getFrac(part1, -1, 1, true) << endl;
-  cout << "2j: " << dchain.getFrac(part1, -1, 2, true) << endl;
-  cout << "3j: " << dchain.getFrac(part1, -1, 3, true) << endl;
-  cout << "4j: " << dchain.getFrac(part1, -1, 4, true) << endl;
-  cout << "No MET" << dchain.getFrac(part1, 0, -1, false) << endl; 
+  State* part2 = dchain.addParticle(1000021);
+  
+  // dchain.displayParticle(part1);
+
+  // cout << "0l + 2j + MET: " << dchain.getFrac(part1, 0, 2, true) << endl;
+  // cout << "0l + 3j + MET: " << dchain.getFrac(part1, 0, 3, true) << endl;
+  // cout << "0l + 4j + MET: " << dchain.getFrac(part1, 0, 4, true) << endl;
+  // cout << "1l + 2j + MET: " << dchain.getFrac(part1, 1, 2, true) << endl;
+  // cout << "1l + 3j + MET: " << dchain.getFrac(part1, 1, 3, true) << endl;
+  // cout << "1l + 4j + MET: " << dchain.getFrac(part1, 1, 4, true) << endl;
+  // cout << "0l: " << dchain.getFrac(part1, 0, -1, true) << endl;
+  // cout << "1l: " << dchain.getFrac(part1, 1, -1, true) << endl;
+  // cout << "2l: " << dchain.getFrac(part1, 2, -1, true) << endl;
+  // cout << "3l: " << dchain.getFrac(part1, 3, -1, true) << endl;
+  // cout << "4l: " << dchain.getFrac(part1, 4, -1, true) << endl;
+  // cout << "0j: " << dchain.getFrac(part1, -1, 0, true) << endl;
+  // cout << "1j: " << dchain.getFrac(part1, -1, 1, true) << endl;
+  // cout << "2j: " << dchain.getFrac(part1, -1, 2, true) << endl;
+  // cout << "3j: " << dchain.getFrac(part1, -1, 3, true) << endl;
+  // cout << "4j: " << dchain.getFrac(part1, -1, 4, true) << endl;
+  // cout << "No MET" << dchain.getFrac(part1, 0, -1, false) << endl; 
+
+  cout.precision(6);
+  cout << endl;
+  cout << "0j: " << dchain.get2Frac(part1, part2, -1, 0, true) << endl;
+  cout << "1j: " << dchain.get2Frac(part1, part2, -1, 1, true) << endl;
+  cout << "2j: " << dchain.get2Frac(part1, part2, -1, 2, true) << endl;
+  cout << "3j: " << dchain.get2Frac(part1, part2, -1, 3, true) << endl;
+  cout << "4j: " << dchain.get2Frac(part1, part2, -1, 4, true) << endl;
+  cout << "5j: " << dchain.get2Frac(part1, part2, -1, 5, true) << endl;
+  cout << "6j: " << dchain.get2Frac(part1, part2, -1, 6, true) << endl;
+  cout << "7j: " << dchain.get2Frac(part1, part2, -1, 7, true) << endl;
+  cout << "8j: " << dchain.get2Frac(part1, part2, -1, 8, true) << endl;
+  cout << endl;
+  cout << "0l: " << dchain.get2Frac(part1, part2, 0, -1, true) << endl;
+  cout << "1l: " << dchain.get2Frac(part1, part2, 1, -1, true) << endl;
+  cout << "2l: " << dchain.get2Frac(part1, part2, 2, -1, true) << endl;
+  cout << "3l: " << dchain.get2Frac(part1, part2, 3, -1, true) << endl;
+  cout << "4l: " << dchain.get2Frac(part1, part2, 4, -1, true) << endl;
+  cout << endl;
+  cout << "0l+4j: " << dchain.get2Frac(part1, part2, 0, 4, true) << endl;
+  cout << "2l+4j: " << dchain.get2Frac(part1, part2, 2, 4, true) << endl;
+  cout << "0l+6j: " << dchain.get2Frac(part1, part2, 0, 6, true) << endl;  
+  cout << "2l+6j: " << dchain.get2Frac(part1, part2, 2, 6, true) << endl;
+  cout << "0l+8j: " << dchain.get2Frac(part1, part2, 0, 8, true) << endl;  
+  cout << "2l+8j: " << dchain.get2Frac(part1, part2, 2, 8, true) << endl;  
 }
 
 /******** TODO ************:
