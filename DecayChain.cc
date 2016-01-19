@@ -16,17 +16,51 @@ public:
 };
 
 
+class DecayChain {
 
-int main(int argc, char** argv) {
+public:
+  DecayChain(): DEBUG(false), PDG(pythia.particleData) {};
 
-  // Generator. Shorthand for the event.
+  bool init(int argc, char** argv);
+  State* addParticle(int i);
+  void displayParticle(State* Head);
+  
+  bool isJ(int i);
+  bool isL(int i);
+  bool isI(int i);
+
+protected:
   Pythia pythia;
-  Event& event = pythia.event;
-  ParticleData& PDG = pythia.particleData;
-
+  ParticleData& PDG;
   ofstream clog;
-  clog.open("DChain.log",ios::out);
 
+private:
+  bool DEBUG;
+  
+  
+};
+
+bool DecayChain::isJ(int i){
+  if (abs(i) < 6) return true;
+  return false;
+}
+
+bool DecayChain::isL(int i){
+  if(abs(i) == 11 || abs(i) == 13) return true;
+  return false;
+}
+
+bool DecayChain::isI(int i){
+  int ii = abs(i);
+  if (ii == 12 || ii == 14 || ii == 16) return true;
+  return false;
+}
+
+bool DecayChain::init(int argc, char** argv){
+
+  PDG = pythia.particleData;
+  clog.open("DChain.log",ios::out);
+  
   if(argc > 1) {
     stringstream ss;
     ss << "SLHA:file = " << argv[1] << endl;
@@ -35,29 +69,33 @@ int main(int argc, char** argv) {
     pythia.readString("SLHA:minMassSM = 10.0");
     pythia.readString("SLHA:allowUserOverride = true");
     pythia.readString("ResonanceWidths:minWidth = 1.0e-30");
-
-
   }
   else {
     clog << "Please give an SLHA file" <<endl;
-    return -1;
+    return false;
   }
-  
+
   // Initialize.
   pythia.init();
 
   bool DEBUG = false;
+  return true;
   
+}
+
+
+State* DecayChain::addParticle(int iIn){
+
   // TODO: populate initial list with final state particles
-  int nStates = 1;
-  State* Final1 = new State();
-  Final1->particles[0] = 1000006;
-  Final1->psize = 1;
+  State* Head = new State();
+  Head->particles[0] = iIn;
+  Head->psize = 1;
   int stateSize = 1;
 
-  State* current = Final1;
+  State* current = Head;
   bool checkDecay = true;
-  
+
+  if (DEBUG) cout << "Starting particle " << iIn << endl;
   while(checkDecay) {
 
     int temp[25];
@@ -112,7 +150,7 @@ int main(int argc, char** argv) {
 
 	if(DEBUG) clog << "   Oldstate: " << oldstate
 		       << " Top: " << top
-		       << " Final1: " << Final1
+		       << " Head: " << Head
 		       << endl;
 
 	int iChan = 0;
@@ -153,15 +191,15 @@ int main(int argc, char** argv) {
 	    newstate->previous = top->previous;
 
 	    // Change head for first particle
-	    if (top == Final1) {
-	      Final1 = newstate;
+	    if (top == Head) {
+	      Head = newstate;
 	      headChanged = true;
-	      if(DEBUG) clog << "     Final1 pointing to newstate" << endl;
+	      if(DEBUG) clog << "     Head pointing to newstate" << endl;
 	    }
 	    else {
 	      if(DEBUG) {
 		clog << "     Changing next of " << top->previous << " to " << newstate <<endl;
-		clog << "     top = " << top << " Final1= " << Final1 <<endl;
+		clog << "     top = " << top << " Head= " << Head <<endl;
 	      }
 	      (top->previous)->next = newstate;
 	    }
@@ -178,7 +216,7 @@ int main(int argc, char** argv) {
 	}
 	if(DEBUG) clog << "  Last: " << last
 		       << " Top: " << top
-		       << " Final1: " << Final1
+		       << " Head: " << Head
 		       << endl;
 
 	if(DEBUG) clog << "  ----- Channel Loop Ends ----" <<endl;
@@ -190,7 +228,8 @@ int main(int argc, char** argv) {
 	  // Delete node completely
 	  if(top->previous) (top->previous)->next = top->next;
 	  if(top->next) (top->next)->previous = top->previous;
-	  if(top == Final1) Final1 = top->next;
+	  if(top == Head) Head = top->next;
+	  stateSize--;
 	}
 	else {
 	    last->next = top->next;
@@ -206,11 +245,11 @@ int main(int argc, char** argv) {
 
     if(stateSizeOld !=stateSize || headChanged) {
 
-      current = Final1;
+      current = Head;
 
       if (DEBUG) {
 	clog <<"Total states: "<< stateSize <<endl;
-        State* cur = Final1;
+        State* cur = Head;
 	int ssize = 0;
 	while(true){
 	  ssize++;
@@ -231,27 +270,41 @@ int main(int argc, char** argv) {
 
   }
 
-  clog <<"Total states: "<< stateSize <<endl;
-  State* cur = Final1;
+  return Head;
+}
+
+void DecayChain::displayParticle(State* Head){
+  
+  State* cur = Head;
   int ssize = 0;
   float brsum = 0.0;
   while(true){
     ssize++;
-    clog << "  " << ssize << "  ";
+    cout << "  " << ssize << "  ";
     for (int i = 0; i< cur->psize;i++)
-      clog << cur->particles[i] << "  " ;
-    clog << cur->bratio;
+      cout << cur->particles[i] << "  " ;
+    cout << cur->bratio;
     brsum += cur->bratio;
-    if (DEBUG) clog << "  " << cur << "  " << cur->previous << "  " << cur->next;
-    clog << endl;
-    if(!cur->next) {
-      if (ssize != stateSize && brsum < 0.99) clog << "  Error after " << ssize << endl;
-      break;
-    }
+    if (DEBUG) cout << "  " << cur << "  " << cur->previous << "  " << cur->next;
+    cout << endl;
+    if(!cur->next) break;
     cur = cur->next;
   }
-  clog << "BRsum = " << brsum << endl;
+  cout << "BRsum = " << brsum << endl;
+
+  
+}
 
 
-  return 0;
+int main(int argc, char** argv) {
+
+  DecayChain dchain;
+  if(!dchain.init(argc, argv)){
+    cout << "Could not init " << endl;
+    return -1;
+  }
+
+  State* part1 = dchain.addParticle(6);
+  dchain.displayParticle(part1);
+  
 }
