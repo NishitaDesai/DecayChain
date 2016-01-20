@@ -24,7 +24,7 @@ public:
 class DecayChain {
 
 public:
-  DecayChain(): DEBUG(false), PDG(pythia.particleData), tol(1.0e-4) {};
+  DecayChain(): DEBUG(false), PDG(pythia.particleData), tol(1.0e-4), noSMdecay(true) {};
 
   bool init(int argc, char** argv);
   State* addParticle(int i);
@@ -32,6 +32,7 @@ public:
 
   float getFrac(State* Head, int nLep = -1, int nJet = -1, int nTau = -1, bool MET = false);
   float get2Frac(State* Head1, State* Head2, int nLep = -1, int nJet = -1, int nTau = -1, bool MET = false);
+  float bosonDecay(int nW = 0, int nZ = 0, int nlep = -1, int njet = -1, int ntau = -1, bool MET = false);  
   
   bool isJ(int i);
   bool isL(int i);
@@ -46,6 +47,7 @@ protected:
 
 private:
   bool DEBUG;
+  bool noSMdecay;
   
   
 };
@@ -129,7 +131,9 @@ State* DecayChain::addParticle(int iIn){
     for (int is = 0; is < current->psize; is++){
       ParticleDataEntry* part = PDG.particleDataEntryPtr(current->particles[is]);
       int pid = abs(part->id());
-      if(!part->mayDecay() ||  pid < 6 || (pid > 10 && pid < 23)){
+      int pidmax = 23;
+      if(noSMdecay) pidmax = 25;
+      if(!part->mayDecay() ||  pid < 6 || (pid > 10 && pid < pidmax)){
 	temp[tsize] = current->particles[is];
 	tsize++;
       
@@ -326,7 +330,14 @@ void DecayChain::displayParticle(State* Head){
 }
 
 //-----------------------------------------------------------
+float DecayChain::bosonDecay(int nW, int nZ, int nlep, int njet, int ntau, bool MET){
 
+  // Add W and Z decay tables, make combinations
+
+  
+}
+
+//-----------------------------------------------------------
 float DecayChain::getFrac(State* Head, int nLep, int nJet, int nTau, bool MET){
 
   if(!Head){
@@ -344,6 +355,7 @@ float DecayChain::getFrac(State* Head, int nLep, int nJet, int nTau, bool MET){
   
   while(true){
     int njet = 0, nlep = 0, ninv = 0, ntau = 0;
+    int nW = 0; nZ = 0;
     for (int i = 0; i< cur->psize;i++) {
       int pid = abs(cur->particles[i]);
       if(pid < 6) njet++;
@@ -351,15 +363,35 @@ float DecayChain::getFrac(State* Head, int nLep, int nJet, int nTau, bool MET){
       if(pid == 15) ntau++;
       if(pid == 12 || pid == 14 || pid == 16) ninv++;
       if(pid > 1000000) ninv++;
+      if(pid == 24) nW++;
+      if(pid == 25) nZ++;
+      }
     }
     
     bool accept = true;
-    if (MET && ninv == 0) accept = false;
-    if (nLep > -1 && nLep != nlep) accept = false;
-    if (nJet > -1 && nJet != njet) accept = false;
-    if (nTau > -1 && nTau != ntau) accept = false;
+    float tempbr = 0.0;
+    // lep, jets, tau, MET
+    float Wbr[4] = {0.213, 0.6, 0.107, 0.321};
+    float Zbr[4] = {0.04, 0.6, 0.34, 0.02};
+
+    // If extra jets or leptons than required
+    if((nlep > nLep && nLep > 0) ||
+       (njet > nJet && nJet > 0))  accept = false;
     
+    if (nW + nZ == 0 && accept) {
+      if (MET && ninv == 0) accept = false;
+      if (nLep > -1 && nLep != nlep) accept = false;
+      if (nJet > -1 && nJet != njet) accept = false;
+      if (nTau > -1 && nTau != ntau) accept = false;
+    }
+    else if(accept) {
+      // Get BR for getting excess jets/leptons/met from gauge bosons
+      tempbr = bosonDec(nW, nZ, nLep-nlep, nJet-njet, (MET && ninv == 0))
+      if (tempbr > 0) accept = true;
+    }
+
     if (accept) brsum += cur->bratio;
+    if(tempbr > 0) brsum *= tempbr;
     if(!cur->next) break;
     cur = cur->next;
   }
@@ -419,7 +451,7 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  dchain.tol = 1.0e-6;
+  dchain.tol = 1.0e-5;
 
   State* part1 = dchain.addParticle(1000021);
   State* part2 = part1; // dchain.addParticle(1000021);
