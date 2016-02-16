@@ -39,15 +39,14 @@ public:
   bool isI(int i);
 
   float tol;
+  bool DEBUG;
+  bool noSMdecay;
   
 protected:
   Pythia pythia;
   ParticleData& PDG;
   ofstream clog;
 
-private:
-  bool DEBUG;
-  bool noSMdecay;
   
   
 };
@@ -332,9 +331,94 @@ void DecayChain::displayParticle(State* Head){
 //-----------------------------------------------------------
 float DecayChain::bosonDecay(int nW, int nZ, int nlep, int njet, int ntau, bool MET){
 
+  cout << " nW+nZ=" << nW+nZ << "njet = " << njet <<endl;
   // Add W and Z decay tables, make combinations
+  float tempbr = 0.0;
+  // lep, jets, tau, MET
+  float Wbr[4] = {0.213, 0.6, 0.107, 0.321};
+  float Zbr[4] = {0.04, 0.6, 0.34, 0.02};
 
+  // You can only get jets in multiples of two
+  if(njet%2 != 0) return 0.0;
+  int nhad = njet/2;
+  if (nhad > nW + nZ) return 0.0;
   
+  if (nhad == nW && nZ == 0) return Wbr[1];
+  if (nhad == nZ && nW == 0) return Zbr[1];
+
+  int bosarr[20], bSize;
+  for (int i = 0; i < nW ;i++){
+    bosarr[bSize] = Wbr[1];
+    bSize++;
+  }
+  for (int i = 0; i < nZ ;i++){
+    bosarr[bSize] = Zbr[1];
+    bSize++;
+  }
+  
+  if (nlep < 0) {
+
+    // If exactly as many jets as from bosons
+    if (bSize == nhad) {
+      tempbr = 1.0;
+      for (int ib = 0; ib < bSize; ib++)
+	tempbr *= bosarr[ib];
+      return tempbr;
+    }
+
+    // Else pick combination
+    // Write code for getting all combinations (nbos, nhad)
+    // Implementation of Knuth's combinatoric Algorithm L: n = bSize, t = nhad   
+
+    int c[25] = {0};
+    
+    // Initialise
+    for(int i = 1; i < nhad+1; i++){
+      c[i] = i-1;
+    }
+    c[nhad+1] = bSize;
+    c[nhad+2] = 0;
+
+    // Visit
+    int iComb;
+    while (true){
+      float tempbr2 = 1.0;
+      for (int j = nhad; j > 0; j--)
+	tempbr2 *= bosarr[c[j]] ;
+
+      tempbr += tempbr2;
+
+      iComb = 1;
+      
+      while (c[iComb] + 1 == c[iComb+1]) {
+	c[iComb] = iComb-1;
+	iComb++;
+      }
+  
+      if(iComb > nhad) break;
+      c[iComb] = c[iComb] + 1;
+    }
+
+  }
+  else if (njet < 0) {
+    // Pure leptonic states
+    
+  }
+  else {
+    // Both leptons and jets specified
+    if (nlep == 0){
+      // TODO: Z can go into MET
+      
+      if(bSize > nhad && nZ == 0) return 0.0;
+      float tempbr2 = 0.0;
+      for (int i = 0; i < bSize; i++){
+	tempbr2 *= bosarr[i];
+      }
+      return tempbr2;
+    }
+  }
+
+  return 0.0;
 }
 
 //-----------------------------------------------------------
@@ -345,56 +429,62 @@ float DecayChain::getFrac(State* Head, int nLep, int nJet, int nTau, bool MET){
     return 0.0;
   }
   
-  if (nLep < 0  && nJet < 0 && !MET) {
+  if (nLep < 0  && nJet < 0 && nTau < 0 && !MET) {
     clog << "DecayChain::getFrac : No final states given. Exiting. " << endl;
     return 0.0;
-  }
-
+  }  
+  
   State* cur = Head;
   float brsum = 0.0;
   
   while(true){
     int njet = 0, nlep = 0, ninv = 0, ntau = 0;
-    int nW = 0; nZ = 0;
+    int nW = 0, nZ = 0, nphot = 0;
     for (int i = 0; i< cur->psize;i++) {
       int pid = abs(cur->particles[i]);
-      if(pid < 6) njet++;
-      if(pid == 11 || pid == 13) nlep++;
-      if(pid == 15) ntau++;
-      if(pid == 12 || pid == 14 || pid == 16) ninv++;
-      if(pid > 1000000) ninv++;
-      if(pid == 24) nW++;
-      if(pid == 25) nZ++;
+      if(pid < 6 || pid == 21) njet++;
+      else if(pid == 11 || pid == 13) nlep++;
+      else if(pid == 15) ntau++;
+      else if(pid == 12 || pid == 14 || pid == 16) ninv++;
+      else if(pid > 1000000) ninv++;
+      else if(pid == 22) nphot++;
+      else if(pid == 24) nW++;
+      else if(pid == 25) nZ++;
+      else cout << " Not asigned:" << pid << endl;
       }
-    }
-    
     bool accept = true;
     float tempbr = 0.0;
-    // lep, jets, tau, MET
-    float Wbr[4] = {0.213, 0.6, 0.107, 0.321};
-    float Zbr[4] = {0.04, 0.6, 0.34, 0.02};
 
     // If extra jets or leptons than required
-    if((nlep > nLep && nLep > 0) ||
-       (njet > nJet && nJet > 0))  accept = false;
-    
-    if (nW + nZ == 0 && accept) {
-      if (MET && ninv == 0) accept = false;
-      if (nLep > -1 && nLep != nlep) accept = false;
-      if (nJet > -1 && nJet != njet) accept = false;
-      if (nTau > -1 && nTau != ntau) accept = false;
-    }
-    else if(accept) {
-      // Get BR for getting excess jets/leptons/met from gauge bosons
-      tempbr = bosonDec(nW, nZ, nLep-nlep, nJet-njet, (MET && ninv == 0))
-      if (tempbr > 0) accept = true;
+    if((nlep > nLep && nLep > -1) ||
+       (njet > nJet && nJet > -1) ||
+       (ntau > nTau && nTau > -1) )  accept = false;
+
+    if (accept) {
+      if (nW + nZ == 0) {
+	if (MET && ninv == 0) accept = false;
+	if (nLep > -1 && nLep != nlep) accept = false;
+	if (nJet > -1 && nJet != njet) accept = false;
+	if (nTau > -1 && nTau != ntau) accept = false;
+      }
+      else  {
+	// Get BR for getting excess jets/leptons/met from gauge bosons
+	tempbr = bosonDecay(nW, nZ, nLep-nlep, nJet-njet, (MET && ninv == 0));
+	if (tempbr > 0) accept = true;
+	cout << "Looking for " << nJet-njet << "jets from " << nW + nZ << "bosons, br = " << tempbr << endl; 
+      }
     }
 
-    if (accept) brsum += cur->bratio;
-    if(tempbr > 0) brsum *= tempbr;
+    if (accept){
+      if(tempbr > tol) brsum *= cur->bratio * tempbr;
+      else brsum += cur->bratio;
+    }
+    
     if(!cur->next) break;
     cur = cur->next;
   }
+
+  clog << "getFrac::Calculating head = "<< Head << " nLep = " << nLep << ", nJet = " << nJet <<" brsum = " << brsum <<endl; 
   
   return brsum;
 }
@@ -414,25 +504,33 @@ float DecayChain::get2Frac(State* Head1, State* Head2, int nLep, int nJet, int n
 
   float brfrac = 0;
 
-  if (nLep > -1 && nJet == -1){
+  if (nLep > -1 && nJet < 1){
     // Only Leptons
     for (int il = 0; il <= nLep; il++)
-      brfrac += getFrac(Head1, il, nJet, MET) * getFrac(Head2, nLep-il, nJet, MET); 
+      brfrac += getFrac(Head1, il, nJet, nTau, MET) * getFrac(Head2, nLep-il, nJet, nTau, MET); 
   }
-  else if (nLep == -1 && nJet > -1) {
+  else if (nLep < 1 && nJet > -1) {
     // Only jets exclusive
-    for (int ij = 0; ij <= nJet; ij++)
-      brfrac += getFrac(Head1, nLep, ij, MET) * getFrac(Head2, nLep, nJet-ij, MET); 
-    
+    for (int ij = 0; ij <= nJet; ij++){
+      if (DEBUG) {
+
+      }
+      clog << "get2Frac:: Calculating combination: "<< ij << ", " << nJet - ij << endl;
+      double frac1 = getFrac(Head1, nLep, ij, -1, MET);
+      double frac2 = getFrac(Head2, nLep, nJet - ij, -1, MET);
+      clog << "get2Frac:: frac1 = " <<  frac1 << "  frac2 = " << frac2 << endl;
+	
+      brfrac += getFrac(Head1, nLep, ij, nTau, MET) * getFrac(Head2, nLep, nJet - ij, nTau, MET); 
+    }
   }
   else if (nLep + nJet == -2){
     // Only MET
-    brfrac += getFrac(Head1, nLep, nJet, MET) * getFrac(Head2, nLep, nJet, MET);     
+    brfrac += getFrac(Head1, nLep, nJet, nTau, MET) * getFrac(Head2, nLep, nJet, nTau, MET);     
   }
   else {
     for (int il = 0; il <= nLep; il++){
       for (int ij = 0; ij <= nJet; ij++){
-	brfrac += getFrac(Head1, il, ij, MET) * getFrac(Head2, nLep-il, nJet-ij, MET); 
+	brfrac += getFrac(Head1, il, ij, nTau, MET) * getFrac(Head2, nLep-il, nJet-ij, nTau, MET); 
       }
     }
   }
@@ -452,6 +550,7 @@ int main(int argc, char** argv) {
   }
 
   dchain.tol = 1.0e-5;
+  dchain.noSMdecay = false;
 
   State* part1 = dchain.addParticle(1000021);
   State* part2 = part1; // dchain.addParticle(1000021);
@@ -461,56 +560,40 @@ int main(int argc, char** argv) {
   cout.precision(6);
   cout << "Discarded BR = " << part1->dbr << endl;
   cout << "tol = " << dchain.tol << " ssize = " << part1->csize << endl;
+  cout << endl;
   
-  cout << endl;
-  cout << "0l + 2j + MET: " << dchain.getFrac(part1, 0, 2, -1, true) << endl;
-  cout << "0l + 3j + MET: " << dchain.getFrac(part1, 0, 3, -1, true) << endl;
-  cout << "0l + 4j + MET: " << dchain.getFrac(part1, 0, 4, -1, true) << endl;
-  cout << "1l + 2j + MET: " << dchain.getFrac(part1, 1, 2, -1, true) << endl;
-  cout << "1l + 3j + MET: " << dchain.getFrac(part1, 1, 3, -1, true) << endl;
-  cout << "1l + 4j + MET: " << dchain.getFrac(part1, 1, 4, -1, true) << endl;
-  cout << "0l: " << dchain.getFrac(part1, 0, -1, -1, true) << endl;
-  cout << "1l: " << dchain.getFrac(part1, 1, -1, -1, true) << endl;
-  cout << "2l: " << dchain.getFrac(part1, 2, -1, -1, true) << endl;
-  cout << "3l: " << dchain.getFrac(part1, 3, -1, -1, true) << endl;
-  cout << "4l: " << dchain.getFrac(part1, 4, -1, -1, true) << endl;
-  cout << "0j: " << dchain.getFrac(part1, -1, 0, -1, true) << endl;
-  cout << "1j: " << dchain.getFrac(part1, -1, 1, -1, true) << endl;
-  cout << "2j: " << dchain.getFrac(part1, -1, 2, -1, true) << endl;
-  cout << "3j: " << dchain.getFrac(part1, -1, 3, -1, true) << endl;
-  cout << "4j: " << dchain.getFrac(part1, -1, 4, -1, true) << endl;
-  cout << "No MET" << dchain.getFrac(part1, 0, -1, false) << endl; 
+  // cout << "0l + 2j + MET: " << dchain.getFrac(part1, 0, 2, -1, true) << endl;
+  // cout << "0l + 3j + MET: " << dchain.getFrac(part1, 0, 3, -1, true) << endl;
+  // cout << "0l + 4j + MET: " << dchain.getFrac(part1, 0, 4, -1, true) << endl;
+  // cout << "1l + 2j + MET: " << dchain.getFrac(part1, 1, 2, -1, true) << endl;
+  // cout << "1l + 3j + MET: " << dchain.getFrac(part1, 1, 3, -1, true) << endl;
+  // cout << "1l + 4j + MET: " << dchain.getFrac(part1, 1, 4, -1, true) << endl;
 
-  cout << endl;
-  cout << "0j: " << dchain.get2Frac(part1, part2, -1, 0, -1, true) << endl;
-  cout << "1j: " << dchain.get2Frac(part1, part2, -1, 1, -1, true) << endl;
-  cout << "2j: " << dchain.get2Frac(part1, part2, -1, 2, -1, true) << endl;
-  cout << "3j: " << dchain.get2Frac(part1, part2, -1, 3, -1, true) << endl;
-  cout << "4j: " << dchain.get2Frac(part1, part2, -1, 4, -1, true) << endl;
-  cout << "5j: " << dchain.get2Frac(part1, part2, -1, 5, -1, true) << endl;
-  cout << "6j: " << dchain.get2Frac(part1, part2, -1, 6, -1, true) << endl;
-  cout << "7j: " << dchain.get2Frac(part1, part2, -1, 7, -1, true) << endl;
-  cout << "8j: " << dchain.get2Frac(part1, part2, -1, 8, -1, true) << endl;
-  cout << endl;
-  cout << "0l: " << dchain.get2Frac(part1, part2, 0, -1, -1, true) << endl;
-  cout << "1l: " << dchain.get2Frac(part1, part2, 1, -1, -1, true) << endl;
-  cout << "2l: " << dchain.get2Frac(part1, part2, 2, -1, -1, true) << endl;
-  cout << "3l: " << dchain.get2Frac(part1, part2, 3, -1, -1, true) << endl;
-  cout << "4l: " << dchain.get2Frac(part1, part2, 4, -1, -1, true) << endl;
-  cout << endl;
-  cout << "0l+4j: " << dchain.get2Frac(part1, part2, 0, 4, -1, true) << endl;
-  cout << "2l+4j: " << dchain.get2Frac(part1, part2, 2, 4, -1, true) << endl;
-  cout << "0l+6j: " << dchain.get2Frac(part1, part2, 0, 6, -1, true) << endl;  
-  cout << "2l+6j: " << dchain.get2Frac(part1, part2, 2, 6, -1, true) << endl;
-  cout << "0l+8j: " << dchain.get2Frac(part1, part2, 0, 8, -1, true) << endl;  
-  cout << "2l+8j: " << dchain.get2Frac(part1, part2, 2, 8, -1, true) << endl;  
-  cout << endl;
-  cout << "0T: " << dchain.getFrac(part1, 0, -1, 0, true) << endl;
-  cout << "1T: " << dchain.getFrac(part1, 0, -1, 1, true) << endl;
-  cout << "2T: " << dchain.getFrac(part1, 0, -1, 2, true) << endl;
-  cout << "3T: " << dchain.getFrac(part1, 0, -1, 3, true) << endl;
-  cout << "4T: " << dchain.getFrac(part1, 0, -1, 4, true) << endl;
-    
+  // for (int il = 0; il < 5; il++) {
+  //   cout << il << "l: " << dchain.getFrac(part1, il, -1, -1, false) << endl;
+  // }
+  // cout << endl;
+
+  // for (int ij = 0; ij < 10; ij++) {
+  //   cout << ij << "j: " << dchain.getFrac(part1, -1, ij, -1, false) << endl;
+  // }
+  // cout << endl;
+
+  // for (int il = 0; il < 5; il++) {
+  //   cout << il << "tau: " << dchain.getFrac(part1, -1, -1, il, false) << endl;
+  // }
+  // cout << endl;
+
+  // for (int ij = 0; ij < 9; ij++) {
+  //   cout << ij << "j (2 part): " << dchain.get2Frac(part1, part2, -1, ij, -1, true) << endl;
+  // }
+  // cout << endl;
+
+
+  cout << "2j: " << dchain.getFrac(part1,-1,2,-1,false) << endl;
+  cout << "2j + MET: " << dchain.getFrac(part1,-1,2,-1,true) << endl;
+  cout << "4j: " << dchain.get2Frac(part1,part2,-1, 4,-1,false) << endl;
+  cout << "4j + MET: " << dchain.get2Frac(part1,part2,-1, 4,-1,true) << endl;  
 }
 
 /******** TODO ************:
